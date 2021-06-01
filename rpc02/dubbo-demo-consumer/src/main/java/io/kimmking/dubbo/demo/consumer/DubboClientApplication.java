@@ -22,7 +22,6 @@ public class DubboClientApplication {
 
 	public static void main(String[] args) {
 
-		ReferenceConfig
 		SpringApplication.run(DubboClientApplication.class).close();
 
 		// UserService service = new xxx();

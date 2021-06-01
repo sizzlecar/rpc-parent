@@ -8,6 +8,7 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
+import org.springframework.aop.framework.ProxyFactory;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
@@ -41,7 +42,7 @@ public final class Rpcfx {
 
     public static <T> T create(final Class<T> serviceClass, final String url, Filter... filters) {
 
-        // 0. 替换动态代理 -> AOP
+        // 0. 替换动态代理 -> 字节码增强
         return (T) Proxy.newProxyInstance(Rpcfx.class.getClassLoader(), new Class[]{serviceClass}, new RpcfxInvocationHandler(serviceClass, url, filters));
 
     }
@@ -109,5 +110,10 @@ public final class Rpcfx {
             System.out.println("resp json: "+respJson);
             return JSON.parseObject(respJson, RpcfxResponse.class);
         }
+    }
+
+
+    public static void main(String[] args) {
+        ProxyFactory pf = new ProxyFactory();
     }
 }
