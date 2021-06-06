@@ -5,8 +5,16 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.parser.ParserConfig;
 import io.kimmking.rpcfx.api.*;
 import io.kimmking.rpcfx.exception.RpcfxException;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.*;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.DelimiterBasedFrameDecoder;
+import io.netty.handler.codec.Delimiters;
+import io.netty.handler.codec.string.StringEncoder;
 import javassist.util.proxy.MethodHandler;
 import javassist.util.proxy.ProxyObject;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -15,10 +23,7 @@ import okhttp3.RequestBody;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 public final class Rpcfx {
 
@@ -75,7 +80,7 @@ public final class Rpcfx {
             // mock == true, new Student("hubao");
 
             RpcfxRequest request = new RpcfxRequest();
-            request.setServiceClass(this.serviceClass.getName());
+            request.setServiceClass("io.kimmking.rpcfx.demo.provider");
             request.setMethod(method.getName());
             request.setParams(params);
 

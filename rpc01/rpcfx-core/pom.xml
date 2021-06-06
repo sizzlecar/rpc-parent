@@ -18,6 +18,13 @@
 	</properties>
 
 	<dependencies>
+
+		<dependency>
+			<groupId>io.netty</groupId>
+			<artifactId>netty-all</artifactId>
+			<version>4.1.65.Final</version>
+		</dependency>
+
 		<dependency>
 			<groupId>com.alibaba</groupId>
 			<artifactId>fastjson</artifactId>
@@ -76,6 +83,9 @@
 			<artifactId>javassist</artifactId>
 			<version>3.21.0-GA</version>
 		</dependency>
+		<!-- https://mvnrepository.com/artifact/io.netty/netty-all -->
+
+
 	</dependencies>
 
 </project>
