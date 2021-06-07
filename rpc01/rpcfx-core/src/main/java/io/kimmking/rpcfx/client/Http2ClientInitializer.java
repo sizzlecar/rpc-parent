@@ -118,7 +118,8 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
         ch.pipeline().addLast(sourceCodec,
                               upgradeHandler,
                               new UpgradeRequestHandler(),
-                              new UserEventLogger());
+                              new UserEventLogger(),
+                                new HttpObjectAggregator( maxContentLength ));
     }
 
     /**
@@ -128,7 +129,7 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            DefaultFullHttpRequest upgradeRequest =
+            /*DefaultFullHttpRequest upgradeRequest =
                     new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/", Unpooled.EMPTY_BUFFER);
 
             // Set HOST header as the remote peer may require it.
@@ -138,14 +139,6 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
                 hostString = remote.getAddress().getHostAddress();
             }
             upgradeRequest.headers().set(HttpHeaderNames.HOST, hostString + ':' + remote.getPort());
-            RpcfxRequest req = new RpcfxRequest();
-            req.setServiceClass("io.kimmking.rpcfx.demo.api.UserService");
-            req.setMethod("findById");
-            Object[] para = new Object[1];
-            para[0] = 1;
-            req.setParams(para);
-            upgradeRequest.touch(JSONObject.toJSONString(req));
-
             ctx.writeAndFlush(upgradeRequest);
 
             ctx.fireChannelActive();
@@ -153,7 +146,8 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
             // Done with this handler, remove it from the pipeline.
             ctx.pipeline().remove(this);
 
-            configureEndOfPipeline(ctx.pipeline());
+            configureEndOfPipeline(ctx.pipeline());*/
+            System.out.println("active");
         }
     }
 

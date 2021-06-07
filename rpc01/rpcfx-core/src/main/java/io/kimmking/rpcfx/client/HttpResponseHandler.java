@@ -107,7 +107,7 @@ public class HttpResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
                 System.out.println(new String(arr, 0, contentLength, CharsetUtil.UTF_8));
             }
 
-            entry.getValue().setSuccess();
         }
     }
+
 }

@@ -17,8 +17,10 @@ package io.kimmking.rpcfx.client;
 import com.alibaba.fastjson.JSONObject;
 import io.kimmking.rpcfx.api.RpcfxRequest;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -34,6 +36,8 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.util.AsciiString;
 import io.netty.util.CharsetUtil;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 import static io.netty.buffer.Unpooled.wrappedBuffer;
@@ -110,33 +114,25 @@ public final class Http2Client {
             System.err.println("Sending request(s)...");
             if (URL != null) {
                 // Create a simple GET request.
-                FullHttpRequest request = new DefaultFullHttpRequest(HTTP_1_1, POST, URL, Unpooled.EMPTY_BUFFER);
-                request.headers().add(HttpHeaderNames.HOST, hostName);
-                request.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), scheme.name());
-                request.headers().add(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.GZIP);
-                request.headers().add(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.DEFLATE);
                 RpcfxRequest req = new RpcfxRequest();
                 req.setServiceClass("io.kimmking.rpcfx.demo.api.UserService");
                 req.setMethod("findById");
                 Object[] para = new Object[1];
                 para[0] = 1;
                 req.setParams(para);
-                request.touch(JSONObject.toJSONString(req));
-                responseHandler.put(streamId, channel.write(request), channel.newPromise());
-                streamId += 2;
-            }
-            if (URL2 != null) {
-                // Create a simple POST request with a body.
-                FullHttpRequest request = new DefaultFullHttpRequest(HTTP_1_1, POST, URL2,
-                        wrappedBuffer(URL2DATA.getBytes(CharsetUtil.UTF_8)));
+                String jsonString = JSONObject.toJSONString(req);
+                ByteBuf content = Unpooled.copiedBuffer(jsonString, StandardCharsets.UTF_8);
+                FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, POST, URL, content);
                 request.headers().add(HttpHeaderNames.HOST, hostName);
                 request.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), scheme.name());
                 request.headers().add(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.GZIP);
                 request.headers().add(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.DEFLATE);
+                request.headers().add(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_JSON);
+                request.headers().add(HttpHeaderNames.CONTENT_LENGTH, jsonString.getBytes().length);
                 responseHandler.put(streamId, channel.write(request), channel.newPromise());
             }
             channel.flush();
-            responseHandler.awaitResponses(50, TimeUnit.SECONDS);
+            responseHandler.awaitResponses(5, TimeUnit.SECONDS);
             System.out.println("Finished HTTP/2 request(s)");
 
             // Wait until the connection is closed.
