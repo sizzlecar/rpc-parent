@@ -10,9 +10,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 
 @SpringBootApplication
 @RestController
@@ -90,6 +99,22 @@ public class RpcfxServerApplication {
 	@Bean(name = "io.kimmking.rpcfx.demo.api.OrderService")
 	public OrderService createOrderService(){
 		return new OrderServiceImpl();
+	}
+
+
+
+	@Component
+	public class AddResponseHeaderFilter extends OncePerRequestFilter {
+
+		@Override
+		protected void doFilterInternal(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
+										FilterChain filterChain) throws ServletException, IOException {
+			String requestId = httpServletRequest.getHeader("request_id");
+			if(!StringUtils.isEmpty(requestId)){
+				httpServletResponse.addHeader("request_id", requestId);
+			}
+			filterChain.doFilter(httpServletRequest, httpServletResponse);
+		}
 	}
 
 }

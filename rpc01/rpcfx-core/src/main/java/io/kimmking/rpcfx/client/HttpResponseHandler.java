@@ -14,13 +14,16 @@
  */
 package io.kimmking.rpcfx.client;
 
+import com.alibaba.fastjson.JSON;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import io.kimmking.rpcfx.api.RpcfxResponse;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http2.HttpConversionUtil;
 import io.netty.util.CharsetUtil;
 import io.netty.util.internal.PlatformDependent;
 
@@ -35,7 +38,10 @@ import java.util.concurrent.TimeUnit;
  */
 public class HttpResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
 
-    private final Map<Integer, Entry<ChannelFuture, ChannelPromise>> streamidPromiseMap;
+    private final Map<String, Entry<ChannelFuture, ChannelPromise>> streamidPromiseMap;
+    private final Cache<String, RpcfxResponse> responseCache = CacheBuilder.newBuilder()
+            .maximumSize(10)
+            .build();
 
     public HttpResponseHandler() {
         // Use a concurrent map because we add and iterate from the main thread (just for the purposes of the example),
@@ -46,13 +52,13 @@ public class HttpResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
     /**
      * Create an association between an anticipated response stream id and a {@link ChannelPromise}
      *
-     * @param streamId The stream for which a response is expected
+     * @param streamId    The stream for which a response is expected
      * @param writeFuture A future that represent the request write operation
-     * @param promise The promise object that will be used to wait/notify events
+     * @param promise     The promise object that will be used to wait/notify events
      * @return The previous object associated with {@code streamId}
      * @see HttpResponseHandler#awaitResponses(long, TimeUnit)
      */
-    public Entry<ChannelFuture, ChannelPromise> put(int streamId, ChannelFuture writeFuture, ChannelPromise promise) {
+    public Entry<ChannelFuture, ChannelPromise> put(String streamId, ChannelFuture writeFuture, ChannelPromise promise) {
         return streamidPromiseMap.put(streamId, new SimpleEntry<ChannelFuture, ChannelPromise>(writeFuture, promise));
     }
 
@@ -61,12 +67,12 @@ public class HttpResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
      *
      * @param timeout Value of time to wait for each response
      * @param unit Units associated with {@code timeout}
-     * @see HttpResponseHandler#put(int, ChannelFuture, ChannelPromise)
+     * @see HttpResponseHandler#put(String, ChannelFuture, ChannelPromise)
      */
     public void awaitResponses(long timeout, TimeUnit unit) {
-        Iterator<Entry<Integer, Entry<ChannelFuture, ChannelPromise>>> itr = streamidPromiseMap.entrySet().iterator();
+        Iterator<Entry<String, Entry<ChannelFuture, ChannelPromise>>> itr = streamidPromiseMap.entrySet().iterator();
         while (itr.hasNext()) {
-            Entry<Integer, Entry<ChannelFuture, ChannelPromise>> entry = itr.next();
+            Entry<String, Entry<ChannelFuture, ChannelPromise>> entry = itr.next();
             ChannelFuture writeFuture = entry.getValue().getKey();
             if (!writeFuture.awaitUninterruptibly(timeout, unit)) {
                 throw new IllegalStateException("Timed out waiting to write for stream id " + entry.getKey());
@@ -87,27 +93,31 @@ public class HttpResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-        Integer streamId = msg.headers().getInt(HttpConversionUtil.ExtensionHeaderNames.STREAM_ID.text());
-        if (streamId == null) {
+    protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) {
+        System.out.println("channelRead0" + this.hashCode());
+        System.out.println("channelRead0" + System.currentTimeMillis());
+        String requestId = msg.headers().getAsString("request_id");
+        if (requestId == null) {
             System.err.println("HttpResponseHandler unexpected message received: " + msg);
             return;
         }
 
-        Entry<ChannelFuture, ChannelPromise> entry = streamidPromiseMap.get(streamId);
+        Entry<ChannelFuture, ChannelPromise> entry = streamidPromiseMap.get(requestId);
         if (entry == null) {
-            System.err.println("Message received for unknown stream id " + streamId);
+            System.err.println("Message received for unknown stream id " + requestId);
         } else {
             // Do stuff with the message (for now just print it)
-            ByteBuf content = msg.content();
-            if (content.isReadable()) {
-                int contentLength = content.readableBytes();
-                byte[] arr = new byte[contentLength];
-                content.readBytes(arr);
-                System.out.println(new String(arr, 0, contentLength, CharsetUtil.UTF_8));
-            }
-
+            ByteBuf byteBuf = msg.content();
+            String contentStr = byteBuf.toString(CharsetUtil.UTF_8);
+            System.out.println("channelRead0收到返回值body:" + contentStr);
+            RpcfxResponse rpcfxResponse = JSON.parseObject(contentStr, RpcfxResponse.class);
+            responseCache.put(requestId, rpcfxResponse);
+            entry.getValue().setSuccess();
         }
     }
 
+
+    public RpcfxResponse getResponse(String uuid){
+        return responseCache.getIfPresent(uuid);
+    }
 }

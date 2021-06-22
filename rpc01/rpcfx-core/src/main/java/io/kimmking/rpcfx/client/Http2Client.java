@@ -16,11 +16,11 @@ package io.kimmking.rpcfx.client;
 
 import com.alibaba.fastjson.JSONObject;
 import io.kimmking.rpcfx.api.RpcfxRequest;
+import io.kimmking.rpcfx.api.RpcfxResponse;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -34,16 +34,12 @@ import io.netty.handler.ssl.ApplicationProtocolConfig.SelectedListenerFailureBeh
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectorFailureBehavior;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.util.AsciiString;
-import io.netty.util.CharsetUtil;
 
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import static io.netty.buffer.Unpooled.wrappedBuffer;
-import static io.netty.handler.codec.http.HttpMethod.GET;
 import static io.netty.handler.codec.http.HttpMethod.POST;
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 /**
  * An HTTP2 client that allows you to send HTTP2 frames to a server using HTTP1-style approaches
@@ -108,10 +104,10 @@ public final class Http2Client {
             http2SettingsHandler.awaitSettings(5, TimeUnit.SECONDS);
 
             HttpResponseHandler responseHandler = initializer.responseHandler();
-            int streamId = 3;
             HttpScheme scheme = SSL ? HttpScheme.HTTPS : HttpScheme.HTTP;
             AsciiString hostName = new AsciiString(HOST + ':' + PORT);
             System.err.println("Sending request(s)...");
+            String uuid = UUID.randomUUID().toString();
             if (URL != null) {
                 // Create a simple GET request.
                 RpcfxRequest req = new RpcfxRequest();
@@ -129,11 +125,14 @@ public final class Http2Client {
                 request.headers().add(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.DEFLATE);
                 request.headers().add(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_JSON);
                 request.headers().add(HttpHeaderNames.CONTENT_LENGTH, jsonString.getBytes().length);
-                responseHandler.put(streamId, channel.write(request), channel.newPromise());
+                request.headers().add("request_id", uuid);
+                responseHandler.put(uuid, channel.write(request), channel.newPromise());
             }
             channel.flush();
             responseHandler.awaitResponses(5, TimeUnit.SECONDS);
+            RpcfxResponse response = responseHandler.getResponse(uuid);
             System.out.println("Finished HTTP/2 request(s)");
+            System.out.println(JSONObject.toJSONString(response));
 
             // Wait until the connection is closed.
             channel.close().syncUninterruptibly();

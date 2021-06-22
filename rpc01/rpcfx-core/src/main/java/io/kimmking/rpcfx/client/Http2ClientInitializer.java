@@ -119,7 +119,8 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
                               upgradeHandler,
                               new UpgradeRequestHandler(),
                               new UserEventLogger(),
-                                new HttpObjectAggregator( maxContentLength ));
+                              new HttpObjectAggregator( maxContentLength ),
+                responseHandler);
     }
 
     /**
@@ -157,6 +158,7 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
     private static class UserEventLogger extends ChannelInboundHandlerAdapter {
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+            System.out.println("---------------------------UserEventLogger---------------");
             System.out.println("User Event Triggered: " + evt);
             ctx.fireUserEventTriggered(evt);
         }
