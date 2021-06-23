@@ -2,16 +2,22 @@ package io.kimmking.rpcfx.client;
 
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.ParserConfig;
 import io.kimmking.rpcfx.api.*;
 import io.kimmking.rpcfx.exception.RpcfxException;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.DelimiterBasedFrameDecoder;
 import io.netty.handler.codec.Delimiters;
+import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http2.HttpConversionUtil;
 import io.netty.handler.codec.string.StringEncoder;
+import io.netty.util.AsciiString;
 import javassist.util.proxy.MethodHandler;
 import javassist.util.proxy.ProxyObject;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +29,11 @@ import okhttp3.RequestBody;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+
+import static io.netty.handler.codec.http.HttpMethod.POST;
 
 public final class Rpcfx {
 
@@ -211,20 +221,63 @@ public final class Rpcfx {
             return JSON.parse(response.getResult().toString());
         }
 
-        private RpcfxResponse post(RpcfxRequest req, String url) throws IOException {
-            String reqJson = JSON.toJSONString(req);
-            System.out.println("req json: "+reqJson);
-
+        private RpcfxResponse post(RpcfxRequest req, String url) {
             // 1.可以复用client
             // 2.尝试使用httpclient或者netty client
-            OkHttpClient client = new OkHttpClient();
-            final Request request = new Request.Builder()
-                    .url(url)
-                    .post(RequestBody.create(JSONTYPE, reqJson))
-                    .build();
-            String respJson = client.newCall(request).execute().body().string();
-            System.out.println("resp json: "+respJson);
-            return JSON.parseObject(respJson, RpcfxResponse.class);
+            url = url.replace("http://", "");
+            String[] urlArr = url.split(":");
+            if(urlArr.length != 2){
+                throw new RpcfxException("E002", "错误的url配置");
+            }
+
+            String host = urlArr[0];
+            String port = urlArr[1].replace("/","");
+            EventLoopGroup workerGroup = new NioEventLoopGroup();
+            Http2ClientInitializer initializer = new Http2ClientInitializer(null, Integer.MAX_VALUE);
+            HttpResponseHandler responseHandler = null;
+            String uuid = UUID.randomUUID().toString();
+            try {
+                // Configure the client.
+                Bootstrap b = new Bootstrap();
+                b.group(workerGroup);
+                b.channel(NioSocketChannel.class);
+                b.option(ChannelOption.SO_KEEPALIVE, true);
+                b.remoteAddress(host, Integer.parseInt(port));
+                b.handler(initializer);
+
+                // Start the client.
+                Channel channel = b.connect().syncUninterruptibly().channel();
+                System.out.println("Connected to [" + host + ':' + port + ']');
+
+                // Wait for the HTTP/2 upgrade to occur.
+                //Http2SettingsHandler http2SettingsHandler = initializer.settingsHandler();
+                //http2SettingsHandler.awaitSettings(5, TimeUnit.SECONDS);
+                responseHandler = initializer.responseHandler();
+                HttpScheme scheme = HttpScheme.HTTP;
+                AsciiString hostName = new AsciiString(host + ':' + port);
+                System.err.println("Sending request(s)...");
+                String jsonString = JSONObject.toJSONString(req);
+                ByteBuf content = Unpooled.copiedBuffer(jsonString, StandardCharsets.UTF_8);
+                FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, POST, url, content);
+                httpRequest.headers().add(HttpHeaderNames.HOST, hostName);
+                httpRequest.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), scheme.name());
+                httpRequest.headers().add(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.GZIP);
+                httpRequest.headers().add(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.DEFLATE);
+                httpRequest.headers().add(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_JSON);
+                httpRequest.headers().add(HttpHeaderNames.CONTENT_LENGTH, jsonString.getBytes().length);
+                httpRequest.headers().add("request_id", uuid);
+                responseHandler.put(uuid, channel.write(httpRequest), channel.newPromise());
+                channel.flush();
+                responseHandler.awaitResponses(5, TimeUnit.SECONDS);
+                RpcfxResponse response = responseHandler.getResponse(uuid);
+                System.out.println("Finished HTTP/2 request(s)");
+                System.out.println(JSONObject.toJSONString(response));
+                // Wait until the connection is closed.
+                channel.close().syncUninterruptibly();
+            } finally {
+                workerGroup.shutdownGracefully();
+            }
+            return responseHandler.getResponse(uuid);
         }
 
         @Override

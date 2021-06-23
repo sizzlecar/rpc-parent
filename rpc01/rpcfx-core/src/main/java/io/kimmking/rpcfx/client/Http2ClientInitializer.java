@@ -14,21 +14,18 @@
  */
 package io.kimmking.rpcfx.client;
 
-import com.alibaba.fastjson.JSONObject;
-import io.kimmking.rpcfx.api.RpcfxRequest;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpClientCodec;
+import io.netty.handler.codec.http.HttpClientUpgradeHandler;
+import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.*;
 import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
 import io.netty.handler.ssl.SslContext;
-
-import java.net.InetSocketAddress;
 
 import static io.netty.handler.logging.LogLevel.INFO;
 
@@ -114,13 +111,12 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
         HttpClientCodec sourceCodec = new HttpClientCodec();
         Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(connectionHandler);
         HttpClientUpgradeHandler upgradeHandler = new HttpClientUpgradeHandler(sourceCodec, upgradeCodec, 65536);
-
         ch.pipeline().addLast(sourceCodec,
                               upgradeHandler,
                               new UpgradeRequestHandler(),
                               new UserEventLogger(),
                               new HttpObjectAggregator( maxContentLength ),
-                responseHandler);
+                              responseHandler);
     }
 
     /**
@@ -130,24 +126,6 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            /*DefaultFullHttpRequest upgradeRequest =
-                    new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/", Unpooled.EMPTY_BUFFER);
-
-            // Set HOST header as the remote peer may require it.
-            InetSocketAddress remote = (InetSocketAddress) ctx.channel().remoteAddress();
-            String hostString = remote.getHostString();
-            if (hostString == null) {
-                hostString = remote.getAddress().getHostAddress();
-            }
-            upgradeRequest.headers().set(HttpHeaderNames.HOST, hostString + ':' + remote.getPort());
-            ctx.writeAndFlush(upgradeRequest);
-
-            ctx.fireChannelActive();
-
-            // Done with this handler, remove it from the pipeline.
-            ctx.pipeline().remove(this);
-
-            configureEndOfPipeline(ctx.pipeline());*/
             System.out.println("active");
         }
     }
@@ -158,7 +136,6 @@ public class Http2ClientInitializer extends ChannelInitializer<SocketChannel> {
     private static class UserEventLogger extends ChannelInboundHandlerAdapter {
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-            System.out.println("---------------------------UserEventLogger---------------");
             System.out.println("User Event Triggered: " + evt);
             ctx.fireUserEventTriggered(evt);
         }
