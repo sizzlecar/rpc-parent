@@ -258,7 +258,7 @@ public final class Rpcfx {
                 System.err.println("Sending request(s)...");
                 String jsonString = JSONObject.toJSONString(req);
                 ByteBuf content = Unpooled.copiedBuffer(jsonString, StandardCharsets.UTF_8);
-                FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, POST, url, content);
+                FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, POST, "/", content);
                 httpRequest.headers().add(HttpHeaderNames.HOST, hostName);
                 httpRequest.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), scheme.name());
                 httpRequest.headers().add(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.GZIP);
