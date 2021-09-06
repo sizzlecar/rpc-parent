@@ -9,14 +9,13 @@ import io.kimmking.rpcfx.exception.RpcfxException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.DelimiterBasedFrameDecoder;
-import io.netty.handler.codec.Delimiters;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http2.HttpConversionUtil;
-import io.netty.handler.codec.string.StringEncoder;
 import io.netty.util.AsciiString;
 import javassist.util.proxy.MethodHandler;
 import javassist.util.proxy.ProxyObject;
@@ -25,6 +24,14 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.curator.x.discovery.ServiceDiscovery;
+import org.apache.curator.x.discovery.ServiceDiscoveryBuilder;
+import org.apache.curator.x.discovery.ServiceProviderBuilder;
+import org.checkerframework.checker.units.qual.C;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
@@ -35,10 +42,32 @@ import java.util.concurrent.TimeUnit;
 
 import static io.netty.handler.codec.http.HttpMethod.POST;
 
+@Slf4j
 public final class Rpcfx {
+
+    private static final ServiceDiscovery<Void> SERVICE_DISCOVER;
 
     static {
         ParserConfig.getGlobalInstance().addAccept("io.kimmking");
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+        CuratorFramework client = CuratorFrameworkFactory.builder().connectString("localhost:2181").namespace("rpcfx").retryPolicy(retryPolicy).build();
+        client.start();
+        ServiceDiscoveryBuilder<Void> discoveryBuilder = ServiceDiscoveryBuilder.builder(Void.class).client(client).basePath("/");
+        SERVICE_DISCOVER = discoveryBuilder.build();
+        try {
+            SERVICE_DISCOVER.start();
+        } catch (Exception e) {
+            log.error("ServiceDiscovery start error");
+        }
+
+        try {
+            for (String queryForName : SERVICE_DISCOVER.queryForNames()) {
+                log.info("find service : {}", queryForName);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
     }
 
     public static <T, filters> T createFromRegistry(final Class<T> serviceClass, final String zkUrl, Router router, LoadBalancer loadBalance, Filter filter) {

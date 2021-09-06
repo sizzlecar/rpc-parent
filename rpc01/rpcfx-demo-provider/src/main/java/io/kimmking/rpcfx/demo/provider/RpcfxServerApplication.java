@@ -1,14 +1,23 @@
 package io.kimmking.rpcfx.demo.provider;
 
+import io.kimmking.rpcfx.annotation.RpcService;
 import io.kimmking.rpcfx.api.RpcfxRequest;
 import io.kimmking.rpcfx.api.RpcfxResolver;
 import io.kimmking.rpcfx.api.RpcfxResponse;
-import io.kimmking.rpcfx.demo.api.OrderService;
-import io.kimmking.rpcfx.demo.api.UserService;
+import io.kimmking.rpcfx.api.ServiceProviderDesc;
 import io.kimmking.rpcfx.server.RpcfxInvoker;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -17,28 +26,52 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import javax.annotation.PostConstruct;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Map;
 
 @SpringBootApplication
 @RestController
-public class RpcfxServerApplication {
+@Slf4j
+public class RpcfxServerApplication implements ApplicationContextAware {
+
+	private ApplicationContext applicationContext;
+
+
+	@PostConstruct
+	public void registerService(){
+		// start zk client
+		RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+		CuratorFramework client = CuratorFrameworkFactory.builder().connectString("localhost:2181").namespace("rpcfx").retryPolicy(retryPolicy).build();
+		client.start();
+		Map<String, Object> rpcServiceBeanMap = this.applicationContext.getBeansWithAnnotation(RpcService.class);
+		rpcServiceBeanMap.forEach((k, v) -> {
+			try{
+				registerService(client, v.getClass().getInterfaces()[0].getName());
+			}catch (Exception e){
+				log.error("registerService happen error");
+			}
+		});
+	}
+
 
 	public static void main(String[] args) throws Exception {
 
 		// start zk client
 		/*RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
 		CuratorFramework client = CuratorFrameworkFactory.builder().connectString("localhost:2181").namespace("rpcfx").retryPolicy(retryPolicy).build();
-		client.start();
+		client.start();*/
 
 
 		// register service
 		// xxx "io.kimmking.rpcfx.demo.api.UserService"
 
-		String userService = "io.kimking.rpcfx.demo.api.UserService";
+		/*String userService = "io.kimking.rpcfx.demo.api.UserService";
 		registerService(client, userService);
 		String orderService = "io.kimking.rpcfx.demo.api.OrderService";
 		registerService(client, orderService);*/
@@ -49,7 +82,7 @@ public class RpcfxServerApplication {
 		SpringApplication.run(RpcfxServerApplication.class, args);
 	}
 
-	/*private static void registerService(CuratorFramework client, String service) throws Exception {
+	private static void registerService(CuratorFramework client, String service) throws Exception {
 		ServiceProviderDesc userServiceSesc = ServiceProviderDesc.builder()
 				.host(InetAddress.getLocalHost().getHostAddress())
 				.port(8080).serviceClass(service).build();
@@ -65,7 +98,7 @@ public class RpcfxServerApplication {
 
 		client.create().withMode(CreateMode.EPHEMERAL).
 				forPath( "/" + service + "/" + userServiceSesc.getHost() + "_" + userServiceSesc.getPort(), "provider".getBytes());
-	}*/
+	}
 
 	@Autowired
 	RpcfxInvoker invoker;
@@ -91,7 +124,7 @@ public class RpcfxServerApplication {
 	// annotation
 
 
-	@Bean(name = "io.kimmking.rpcfx.demo.api.UserService")
+	/*@Bean(name = "io.kimmking.rpcfx.demo.api.UserService")
 	public UserService createUserService(){
 		return new UserServiceImpl();
 	}
@@ -99,7 +132,7 @@ public class RpcfxServerApplication {
 	@Bean(name = "io.kimmking.rpcfx.demo.api.OrderService")
 	public OrderService createOrderService(){
 		return new OrderServiceImpl();
-	}
+	}*/
 
 
 
@@ -114,7 +147,13 @@ public class RpcfxServerApplication {
 				httpServletResponse.addHeader("request_id", requestId);
 			}
 			filterChain.doFilter(httpServletRequest, httpServletResponse);
+
 		}
 	}
 
+
+	@Override
+	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+		this.applicationContext = applicationContext;
+	}
 }
