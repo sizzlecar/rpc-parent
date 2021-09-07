@@ -30,8 +30,6 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.x.discovery.ServiceDiscovery;
 import org.apache.curator.x.discovery.ServiceDiscoveryBuilder;
-import org.apache.curator.x.discovery.ServiceProviderBuilder;
-import org.checkerframework.checker.units.qual.C;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
@@ -39,34 +37,20 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static io.netty.handler.codec.http.HttpMethod.POST;
 
 @Slf4j
 public final class Rpcfx {
 
-    private static final ServiceDiscovery<Void> SERVICE_DISCOVER;
+    private static final CuratorFramework CURATOR_FRAMEWORK;
 
     static {
         ParserConfig.getGlobalInstance().addAccept("io.kimmking");
         RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
-        CuratorFramework client = CuratorFrameworkFactory.builder().connectString("localhost:2181").namespace("rpcfx").retryPolicy(retryPolicy).build();
-        client.start();
-        ServiceDiscoveryBuilder<Void> discoveryBuilder = ServiceDiscoveryBuilder.builder(Void.class).client(client).basePath("/");
-        SERVICE_DISCOVER = discoveryBuilder.build();
-        try {
-            SERVICE_DISCOVER.start();
-        } catch (Exception e) {
-            log.error("ServiceDiscovery start error");
-        }
-
-        try {
-            for (String queryForName : SERVICE_DISCOVER.queryForNames()) {
-                log.info("find service : {}", queryForName);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        CURATOR_FRAMEWORK = CuratorFrameworkFactory.builder().connectString("localhost:2181").namespace("rpcfx").retryPolicy(retryPolicy).build();
+        CURATOR_FRAMEWORK.start();
 
     }
 
@@ -75,11 +59,37 @@ public final class Rpcfx {
         // 加filte之一
 
         // curator Provider list from zk
-        List<String> invokers = new ArrayList<>();
+        ServiceDiscoveryBuilder<String> discoveryBuilder = ServiceDiscoveryBuilder
+                .builder(String.class)
+                .client(CURATOR_FRAMEWORK)
+                .watchInstances(true)
+                .basePath("/" + serviceClass.getName());
+        ServiceDiscovery<String> stringServiceDiscovery = discoveryBuilder.build();
+        try {
+            stringServiceDiscovery.start();
+        } catch (Exception e) {
+            log.error("ServiceDiscovery start error");
+        }
+
+        Collection<String> instances = null;
+        try{
+            instances = stringServiceDiscovery.queryForNames();
+        }catch (Exception e){
+            log.error("寻找服务发生错误", e);
+            throw new RuntimeException("寻找服务发生错误");
+        }
+
+        List<String> invokerList = instances
+                .stream()
+                .map(str -> {
+                    String[] strings = str.split("_");
+                    return  "http://" + strings[0] + ":" + strings[1] + "/";
+                }).collect(Collectors.toList());
+
         // 1. 简单：从zk拿到服务提供的列表
         // 2. 挑战：监听zk的临时节点，根据事件更新这个list（注意，需要做个全局map保持每个服务的提供者List）
 
-        List<String> urls = router.route(invokers);
+        List<String> urls = router.route(invokerList);
 
         String url = loadBalance.select(urls); // router, loadbalance
 

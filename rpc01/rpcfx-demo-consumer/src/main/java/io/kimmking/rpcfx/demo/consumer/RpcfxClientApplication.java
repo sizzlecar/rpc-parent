@@ -13,9 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import java.util.List;
-import java.util.Random;
 
 @SpringBootApplication
+@Slf4j
 public class RpcfxClientApplication {
 
 	// 二方库
@@ -28,16 +28,23 @@ public class RpcfxClientApplication {
 		// UserService service = new xxx();
 		// service.findById
 
-		UserService userService = Rpcfx.create(UserService.class, "http://localhost:8089/");
+		/*UserService userService = Rpcfx.create(UserService.class, "http://localhost:8089/");
 		User user = userService.findById(1);
 		System.out.println("find user id=1 from server: " + user.getName());
 
 		OrderService orderService = Rpcfx.create(OrderService.class, "http://localhost:8089/");
 		Order order = orderService.findOrderById(1992129);
 		System.out.println(String.format("find order name=%s, amount=%f",order.getName(),order.getAmount()));
-
+*/
 		//
-		//UserService userService2 = Rpcfx.createFromRegistry(UserService.class, "localhost:2181", new TagRouter(), new RandomLoadBalancer(), new CuicuiFilter());
+		UserService userService2 = Rpcfx.createFromRegistry(UserService.class, "localhost:2181", new TagRouter(), new RandomLoadBalancer(), new CuicuiFilter());
+		User userService2ById = userService2.findById(1);
+		log.info("find user id=1 from server: {}", userService2ById.getName());
+
+		OrderService orderService2 = Rpcfx.createFromRegistry(OrderService.class, "localhost:2181", new TagRouter(), new RandomLoadBalancer(), new CuicuiFilter());
+		Order orderService2ById = orderService2.findOrderById(1992129);
+		log.info("find order id=1992129 from server: {}", orderService2ById.getName());
+
 
 //		SpringApplication.run(RpcfxClientApplication.class, args);
 	}

@@ -1,5 +1,6 @@
 package io.kimmking.rpcfx.demo.provider;
 
+import com.alibaba.fastjson.JSON;
 import io.kimmking.rpcfx.annotation.RpcService;
 import io.kimmking.rpcfx.api.RpcfxRequest;
 import io.kimmking.rpcfx.api.RpcfxResolver;
@@ -14,6 +15,7 @@ import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.CreateMode;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
@@ -33,6 +35,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.HashMap;
 import java.util.Map;
 
 @SpringBootApplication
@@ -43,6 +46,13 @@ public class RpcfxServerApplication implements ApplicationContextAware {
 	private ApplicationContext applicationContext;
 
 
+	@Value("${server.port}")
+	private Integer port;
+
+
+	/**
+	 * spring启动之后，扫描所有加了 @RpcService 注解service，注册到zookeeper中
+	 */
 	@PostConstruct
 	public void registerService(){
 		// start zk client
@@ -52,9 +62,9 @@ public class RpcfxServerApplication implements ApplicationContextAware {
 		Map<String, Object> rpcServiceBeanMap = this.applicationContext.getBeansWithAnnotation(RpcService.class);
 		rpcServiceBeanMap.forEach((k, v) -> {
 			try{
-				registerService(client, v.getClass().getInterfaces()[0].getName());
+				registerService(client, v.getClass().getInterfaces()[0].getName(), port);
 			}catch (Exception e){
-				log.error("registerService happen error");
+				log.error("registerService happen error", e);
 			}
 		});
 	}
@@ -77,27 +87,28 @@ public class RpcfxServerApplication implements ApplicationContextAware {
 		registerService(client, orderService);*/
 
 
-		// 进一步的优化，是在spring加载完成后，从里面拿到特定注解的bean，自动注册到zk
+		// 进一步的优化，是在spring加载完成后，从里面拿到特定注解的bean，自动注册到zk done
 
 		SpringApplication.run(RpcfxServerApplication.class, args);
 	}
 
-	private static void registerService(CuratorFramework client, String service) throws Exception {
+	private static void registerService(CuratorFramework client, String service, Integer port) throws Exception {
 		ServiceProviderDesc userServiceSesc = ServiceProviderDesc.builder()
 				.host(InetAddress.getLocalHost().getHostAddress())
-				.port(8080).serviceClass(service).build();
+				.port(port).serviceClass(service).build();
 		// String userServiceSescJson = JSON.toJSONString(userServiceSesc);
 
 		try {
 			if ( null == client.checkExists().forPath("/" + service)) {
-				client.create().withMode(CreateMode.PERSISTENT).forPath("/" + service, "service".getBytes());
+				Map<String, String> map = new HashMap<>(1);
+				map.put("type", "service");
+				client.create().withMode(CreateMode.PERSISTENT).forPath("/" + service, JSON.toJSONBytes(map));
 			}
 		} catch (Exception ex) {
 			ex.printStackTrace();
 		}
-
 		client.create().withMode(CreateMode.EPHEMERAL).
-				forPath( "/" + service + "/" + userServiceSesc.getHost() + "_" + userServiceSesc.getPort(), "provider".getBytes());
+				forPath( "/" + service + "/" + userServiceSesc.getHost() + "_" + userServiceSesc.getPort(), JSON.toJSONBytes(userServiceSesc));
 	}
 
 	@Autowired
